@@ -12,8 +12,10 @@ prompt = '$ '
 while 1:
     os.write(stdOutput, prompt.encode())
     userInput = os.read(stdInput, 20)
-
+    
     tokens = re.split(b' ', userInput)
+    
+    if len(tokens) == 1 and tokens[0].decode() == 'exit\n': break
 
     for i in range(len(tokens)):
         os.write(stdOutput, tokens[i])
