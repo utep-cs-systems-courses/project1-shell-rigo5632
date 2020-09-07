@@ -7,17 +7,19 @@ import sys
 stdInput  = 0 # keyboard input
 stdOutput = 1 # display output
 stdError  = 2 # error output
-prompt = '$ '
+constants = {'shellPrompt': '$ ', 'noSpace': '', 'emptySpace':' '}
 
 while 1:
-    os.write(stdOutput, prompt.encode())
-    userInput = os.read(stdInput, 20)
+    os.write(stdOutput, constants['shellPrompt'].encode())
+    userInput = os.read(stdInput, 10000)
+    words = re.split(b'\W+', userInput)
+
+    tokens = []
+    for token in words: tokens.append(token) if token != b'' else None
     
-    tokens = re.split(b' ', userInput)
-    
-    if len(tokens) == 1 and tokens[0].decode() == 'exit\n': break
+    if len(tokens) == 1 and tokens[0].decode() == 'exit' : break
 
     for i in range(len(tokens)):
         os.write(stdOutput, tokens[i])
-        os.write(stdOutput, ''.encode() if i+1 == len(tokens) else ' '.encode())
+        os.write(stdOutput, constants['noSpace'].encode() if i+1 == len(tokens) else constants['emptySpace'].encode())
 exit()
