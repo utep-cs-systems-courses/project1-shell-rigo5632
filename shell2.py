@@ -14,8 +14,7 @@ while True:
 
     elif rc == 0:                   # child
         tokens = []
-        redirectOutput = False
-        redirectInput = False
+        redirect = {'inTokens': False, 'fileDescriptor': None, 'file': None}
         
         os.write(stdDisplay, '$ '.encode())
         userInput = os.read(0, 100)
@@ -24,25 +23,28 @@ while True:
         
         for token in line:
             if token == b'>':
-                redirectOutput = True
+                redirect['inTokens'] = True
+                redirect['fileDescriptor'] = 1
+                redirect['file'] = os.O_CREAT | os.O_WRONLY
                 token = b''
             elif token == b'<':
-                redirectInput = True
+                redirect['inTokens'] = True
+                redirect['fileDescriptor'] = 0
+                redirect['file'] = os.O_RDONLY
                 token = b''
             tokens.append(token.decode()) if token != b'' else None
 
         if len(tokens) == 1 and tokens[0] == 'exit': sys.exit(2)
         
-        if redirectOutput:
-            os.close(1)
-            os.open(tokens[len(tokens)-1], os.O_CREAT | os.O_WRONLY)
-            os.set_inheritable(1, True)
+        if redirect['inTokens']:
+            os.close(redirect['fileDescriptor'])
+            os.open(tokens[len(tokens)-1], redirect['file'])
+            os.set_inheritable(redirect['fileDescriptor'], True)
             tokens = tokens[:len(tokens)-1]
-            redirect = False
-        elif redirectInput:
-            print('Do Something Cool')
-            redirectInput = True
-
+            redirect['inTokens'] = False
+            redirect['fileDescriptor'] = None
+            redirect['file'] = None
+            
         if tokens:
             for dir in re.split(":", os.environ['PATH']):
                 program = "%s/%s" % (dir, tokens[0])
