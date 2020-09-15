@@ -101,21 +101,6 @@ def getTokens(userInput):
     
     return tokens, fullPath
 
-# Creates a new child process and will run the execve cmd
-def createNewChild(tokens, fullPath, background):
-    child = os.fork()
-    if child < 0:
-        os.write(2, "Error to fork Child".encode())
-        sys.exit(1)
-    elif child == 0:
-        executeCommand(tokens, fullPath)
-        sys.exit(0)
-    else:
-        if background:
-            return # dont wait for child to finish
-        else:
-            os.wait() # wait for child to finish
-
 # Sets up for pipe cmds
 def pipeFunctionality():
     pr, pw = os.pipe()
@@ -125,19 +110,18 @@ def pipeFunctionality():
     if newChild < 0:
         os.write(2, 'Fork Failed'.encode())
         sys.exit(1)
-    elif newChild == 0:
+    elif newChild == 0: # executes 1 cmd
         os.dup2(pw, 1)
         for fd in (pr, pw): os.close(fd)
         executeCommand(pipe['cmd1'], fullPath)
-    else:
+    else: #executes 2 cmd with cmd 1 as input
         os.dup2(pr, 0)
         for fd in (pr, pw): os.close(fd)
 
         executeCommand(pipe['cmd2'], fullPath)
     
 def shell():
-    #prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
-    prompt = '$ '
+    prompt = '$ ' if 'PS1' not in os.environ else os.environ['PS1']
     os.write(1, prompt.encode())
     userInput = os.read(0, 1024)
 
