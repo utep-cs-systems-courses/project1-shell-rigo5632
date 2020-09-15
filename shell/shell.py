@@ -136,8 +136,7 @@ def createPipe():
     os.close(pw)
     
 def shell():
-    #prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
-    prompt = '$ '
+    prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
     
     os.write(1, prompt.encode())
     userInput = os.read(0, 1024)
