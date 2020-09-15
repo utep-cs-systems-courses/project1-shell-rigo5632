@@ -117,27 +117,27 @@ def createNewChild(tokens, fullPath, background):
             os.wait() # wait for child to finish
 
 # Sets up for pipe cmds
-def createPipe():
-    pr, pw = os.pipe() # creates pr(input) and pw(output) fd
-    stdIn = os.dup(0) #saves stdIn
-    stdOut = os.dup(1) # saves stdOut 
+def pipeFunctionality():
+    pr, pw = os.pipe()
+    for fd in (pr, pw): os.set_inheritable(fd, True)
 
-    os.dup2(pw, 1) #replaces stdOut with pw fd
-    childWriteProcess = createNewChild(pipe['cmd1'], fullPath, True) #Executes process, does not wait
-    os.dup2(pr, 0)# replaces stIn with pr fd
-    os.dup2(stdOut, 1) #resets fd to screen 
-    childInputProcess = createNewChild(pipe['cmd2'], fullPath, False) #executes second command
-    os.dup2(stdIn, 0)
-    
-    # reset all file descriptor 
-    os.close(stdIn)
-    os.close(stdOut)
-    os.close(pr)
-    os.close(pw)
+    newChild = os.fork()
+    if newChild < 0:
+        os.write(2, 'Fork Failed'.encode())
+        sys.exit(1)
+    elif newChild == 0:
+        os.dup2(pw, 1)
+        for fd in (pr, pw): os.close(fd)
+        executeCommand(pipe['cmd1'], fullPath)
+    else:
+        os.dup2(pr, 0)
+        for fd in (pr, pw): os.close(fd)
+
+        executeCommand(pipe['cmd2'], fullPath)
     
 def shell():
-    prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
-    
+    #prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
+    prompt = '$ '
     os.write(1, prompt.encode())
     userInput = os.read(0, 1024)
 
@@ -151,8 +151,7 @@ while True:
         sys.exit(1)
     elif rc == 0: # child
         if redirect['inTokens']: tokens = handleRedirection(redirect)
-        if pipe['inTokens']: createPipe()
-            
+        if pipe['inTokens']: pipeFunctionality()
         if tokens and not pipe['inTokens']: executeCommand(tokens, fullPath)
         sys.exit(0)
     else: #parent
