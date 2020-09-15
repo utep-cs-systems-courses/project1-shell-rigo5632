@@ -16,10 +16,12 @@ while True:
         tokens = []
         redirect = {'inTokens': False, 'fileDescriptor': None, 'file': None}
         
-        os.write(stdDisplay, '$ '.encode())
+        prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
+        os.write(stdDisplay, prompt.encode())
         userInput = os.read(0, 100)
         
         line = re.split(b'\s', userInput)
+        print(line)
         
         for token in line:
             if token == b'>':
@@ -55,6 +57,6 @@ while True:
             os.write(2, ("Child:    Could not exec %s\n" % tokens[0]).encode())
             sys.exit(1)
         sys.exit(0)
-    else:                          
+    else:
         childPidCode = os.wait()
         if childPidCode[1] == 512: sys.exit(1)
