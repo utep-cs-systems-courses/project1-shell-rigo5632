@@ -26,9 +26,14 @@ def getTokens(userInput):
 
     if len(tokens) == 1 and tokens[0] == 'exit': sys.exit(0)
     if len(tokens) == 2 and tokens[0] == 'cd':
-        os.chdir(tokens[1])
-        tokens = []
-        fullPath = None
+        try:
+            os.chdir(tokens[1])
+            tokens = []
+            fullPath = None
+        except:
+            os.write(2, 'Path not found'.encode())
+        finally:
+            return None, None
     
     return tokens, fullPath
         
