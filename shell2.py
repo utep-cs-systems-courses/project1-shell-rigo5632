@@ -2,19 +2,23 @@
 
 import os, sys, re
 
+# holds flags for when redirection (<, >) are found
 redirect ={'inTokens': False, 'fileDescriptor': None, 'file': None, 'previousFD': None}
+
+# Store the flags when a pipeline is found (|)
 pipe = {
     'inTokens': False,
     'split': 0,
-    'pr': None,
-    'pw': None,
     'cmd1': None,
     'cmd2': None
 }
+# Have we seen the background token? (&)
 backgroundProcess = False
 
+# Executes Command with tokens, can also execute full path cmds (eg, /usr/bin/ls)
 def executeCommand(tokens, fullPath):
     if not fullPath:
+        #runs tokens
         for dir in re.split(':', os.environ['PATH']):
             program = "%s/%s" % (dir, tokens[0])
             try:
@@ -24,6 +28,7 @@ def executeCommand(tokens, fullPath):
         os.write(2, ("%s Cannot be found\n" % tokens[0]).encode())
         sys.exit(0)
     else:
+        # runs full path command
         try:
             os.execve(tokens[0], tokens, os.environ)
         except FileNotFoundError:
@@ -31,8 +36,10 @@ def executeCommand(tokens, fullPath):
         os.write(2, ('%s Cannot be found\n' % tokens[0]).encode())
         sys.exit(0)
     sys.exit(0)
-                
+
+# Resets redirection flags once child has finished executing redirection
 def resetRedirection():
+    # resets stdIn/stdOut depending on the type of redirection
     os.dup2(redirect['previousFD'], redirect['fileDescriptor'])
     os.close(redirect['previousFD'])
     redirect['inTokens'] = False
@@ -40,12 +47,14 @@ def resetRedirection():
     redirect['file'] = None
     redirect['previousFD'] = None
 
+# Sets the type of redirection (input/output)
 def handleRedirection(redirect):
     os.close(redirect['fileDescriptor'])
     os.open(tokens[len(tokens)-1], redirect['file'])
     os.set_inheritable(redirect['fileDescriptor'], True)
     return tokens[:len(tokens)-1]
 
+# Gets tokens from String
 def getTokens(userInput):
     line = re.split(b'\s', userInput)
     fullPath = re.search('/', line[0].decode())
@@ -53,32 +62,34 @@ def getTokens(userInput):
     counter = 0
     
     for token in line:
-        if token == b'>':
+        if token == b'>':       #redirection Output setup of flags
             redirect['inTokens'] = True
             redirect['fileDescriptor'] = 1
             redirect['file'] = os.O_CREAT | os.O_WRONLY
             redirect['previousFD'] = os.dup(1)
             token = b''
-        elif token == b'<':
+        elif token == b'<':     #redirection Input setup of flags
             redirect['inTokens'] = True
             redirect['fileDescriptor'] = 0
             redirect['file'] = os.O_RDONLY
             redirect['previousFD'] = os.dup(0)
             token = b''
-        elif token == b'|':
+        elif token == b'|':     #pipes flag setup
             pipe['inTokens'] = True
             pipe['split'] = counter
             token = b''
-        elif token == b'&':
+        elif token == b'&':     #background flag set up
             backgroundProcess = True
             token = b''
         tokens.append(token.decode()) if token != b'' else None
         counter += 1
-    if pipe['inTokens']:
+        
+    if pipe['inTokens']:    #gets 2 cmds made when using pipes
         pipe['cmd1'] = tokens[:pipe['split']]
         pipe['cmd2'] = tokens[pipe['split']:]
-    if len(tokens) == 1 and tokens[0] == 'exit': sys.exit(0)
-    if len(tokens) == 2 and tokens[0] == 'cd':
+        
+    if len(tokens) == 1 and tokens[0] == 'exit': sys.exit(0) #Exit Shell
+    if len(tokens) == 2 and tokens[0] == 'cd':               #Moves Directories
         try:
             os.chdir(tokens[1])
             tokens = []
@@ -90,6 +101,7 @@ def getTokens(userInput):
     
     return tokens, fullPath
 
+# Creates a new child process and will run the execve cmd
 def createNewChild(tokens, fullPath, background):
     child = os.fork()
     if child < 0:
@@ -100,21 +112,24 @@ def createNewChild(tokens, fullPath, background):
         sys.exit(0)
     else:
         if background:
-            return
+            return # dont wait for child to finish
         else:
-            os.wait()
+            os.wait() # wait for child to finish
+
+# Sets up for pipe cmds
 def createPipe():
-    pr, pw = os.pipe()
-    stdIn = os.dup(0)
-    stdOut = os.dup(1)
+    pr, pw = os.pipe() # creates pr(input) and pw(output) fd
+    stdIn = os.dup(0) #saves stdIn
+    stdOut = os.dup(1) # saves stdOut 
 
-    os.dup2(pw, 1)
-    childWriteProcess = createNewChild(pipe['cmd1'], fullPath, True)
-    os.dup2(pr, 0)
-    os.dup2(stdOut, 1)
-    childInputProcess = createNewChild(pipe['cmd2'], fullPath, False)
+    os.dup2(pw, 1) #replaces stdOut with pw fd
+    childWriteProcess = createNewChild(pipe['cmd1'], fullPath, True) #Executes process, does not wait
+    os.dup2(pr, 0)# replaces stIn with pr fd
+    os.dup2(stdOut, 1) #resets fd to screen 
+    childInputProcess = createNewChild(pipe['cmd2'], fullPath, False) #executes second command
     os.dup2(stdIn, 0)
-
+    
+    # reset all file descriptor 
     os.close(stdIn)
     os.close(stdOut)
     os.close(pr)
@@ -135,13 +150,13 @@ while True:
     if rc < 0:
         os.write(stdErrorDisplay, ("fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
-    elif rc == 0: # child1
+    elif rc == 0: # child
         if redirect['inTokens']: tokens = handleRedirection(redirect)
         if pipe['inTokens']: createPipe()
             
         if tokens and not pipe['inTokens']: executeCommand(tokens, fullPath)
         sys.exit(0)
-    else:
+    else: #parent
         exitCode = os.wait() if not backgroundProcess else None
         if pipe['inTokens']: pipe['inTokens'] = False
         if redirect['inTokens']: resetRedirection()
