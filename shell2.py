@@ -8,8 +8,6 @@ pipe = {
     'split': 0,
     'pr': None,
     'pw': None,
-    'stdIn': os.dup(0),
-    'stdOut': os.dup(1)
     'cmd1': None,
     'cmd2': None
 }
@@ -32,6 +30,7 @@ def executeCommand(tokens, fullPath):
             pass
         os.write(2, ('%s Cannot be found\n' % tokens[0]).encode())
         sys.exit(0)
+    sys.exit(0)
                 
 def resetRedirection():
     os.dup2(redirect['previousFD'], redirect['fileDescriptor'])
@@ -67,17 +66,17 @@ def getTokens(userInput):
             redirect['previousFD'] = os.dup(0)
             token = b''
         elif token == b'|':
-            pipe['pr'], pipe['pw'] = os.pipe()
-            os.set_inheritable(pipe['pr'], True)
-            os.set_inheritable(pipe['pw'], True)
             pipe['inTokens'] = True
             pipe['split'] = counter
+            token = b''
         elif token == b'&':
             backgroundProcess = True
             token = b''
         tokens.append(token.decode()) if token != b'' else None
         counter += 1
-
+    if pipe['inTokens']:
+        pipe['cmd1'] = tokens[:pipe['split']]
+        pipe['cmd2'] = tokens[pipe['split']:]
     if len(tokens) == 1 and tokens[0] == 'exit': sys.exit(0)
     if len(tokens) == 2 and tokens[0] == 'cd':
         try:
@@ -90,8 +89,37 @@ def getTokens(userInput):
             return None, None
     
     return tokens, fullPath
-        
 
+def createNewChild(tokens, fullPath, background):
+    child = os.fork()
+    if child < 0:
+        os.write(2, "Error to fork Child".encode())
+        sys.exit(1)
+    elif child == 0:
+        executeCommand(tokens, fullPath)
+        sys.exit(0)
+    else:
+        if background:
+            return
+        else:
+            os.wait()
+def createPipe():
+    pr, pw = os.pipe()
+    stdIn = os.dup(0)
+    stdOut = os.dup(1)
+
+    os.dup2(pw, 1)
+    childWriteProcess = createNewChild(pipe['cmd1'], fullPath, True)
+    os.dup2(pr, 0)
+    os.dup2(stdOut, 1)
+    childInputProcess = createNewChild(pipe['cmd2'], fullPath, False)
+    os.dup2(stdIn, 0)
+
+    os.close(stdIn)
+    os.close(stdOut)
+    os.close(pr)
+    os.close(pw)
+    
 def shell():
     #prompt = os.environ['PS1'] if os.environ['PS1'] != '' else '$ '
     prompt = '$ '
@@ -109,16 +137,13 @@ while True:
         sys.exit(1)
     elif rc == 0: # child1
         if redirect['inTokens']: tokens = handleRedirection(redirect)
-        if pipe['inTokens']:
-            if pipe['instruction']:
-                os.dup2(pipe['pw'], 1)
-                for fd in range(0, pipe['pw']+1):
-                    if fd != 1: os.close(fd)
-                os.execve('/usr/bin/ls', [' '], os.environ)
-        if tokens: executeCommand(tokens, fullPath)
+        if pipe['inTokens']: createPipe()
+            
+        if tokens and not pipe['inTokens']: executeCommand(tokens, fullPath)
         sys.exit(0)
     else:
-        exitCode = os.wait()
+        exitCode = os.wait() if not backgroundProcess else None
+        if pipe['inTokens']: pipe['inTokens'] = False
         if redirect['inTokens']: resetRedirection()
         if exitCode[1] != 0: os.write(1, ('Program Terminated with exit code: %d\n' % exitCode[1]).encode())
         tokens, fullPath = shell()
