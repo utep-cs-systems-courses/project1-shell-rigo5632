@@ -12,6 +12,7 @@ pipe = {
     'cmd1': None,
     'cmd2': None
 }
+
 # Have we seen the background token? (&)
 backgroundProcess = False
 
@@ -56,32 +57,32 @@ def handleRedirection(redirect):
 
 # Gets tokens from String
 def getTokens(userInput):
-    line = re.split(b'\s', userInput)
-    fullPath = re.search('/', line[0].decode())
+    line = re.split('\s', userInput)
+    fullPath = re.search('/', line[0])
     tokens = []
     counter = 0
     
-    for token in line:
-        if token == b'>':       #redirection Output setup of flags
+    for token in line:    
+        if token == '>':       #redirection Output setup of flags
             redirect['inTokens'] = True
             redirect['fileDescriptor'] = 1
             redirect['file'] = os.O_CREAT | os.O_WRONLY
             redirect['previousFD'] = os.dup(1)
-            token = b''
-        elif token == b'<':     #redirection Input setup of flags
+            token = ''
+        elif token == '<':     #redirection Input setup of flags
             redirect['inTokens'] = True
             redirect['fileDescriptor'] = 0
             redirect['file'] = os.O_RDONLY
             redirect['previousFD'] = os.dup(0)
-            token = b''
-        elif token == b'|':     #pipes flag setup
+            token = ''
+        elif token == '|':     #pipes flag setup
             pipe['inTokens'] = True
             pipe['split'] = counter
-            token = b''
-        elif token == b'&':     #background flag set up
+            token = ''
+        elif token == '&':     #background flag set up
             backgroundProcess = True
-            token = b''
-        tokens.append(token.decode()) if token != b'' else None
+            token = ''
+        tokens.append(token) if token != '' else None
         counter += 1
         
     if pipe['inTokens']:    #gets 2 cmds made when using pipes
@@ -92,13 +93,11 @@ def getTokens(userInput):
     if len(tokens) == 2 and tokens[0] == 'cd':               #Moves Directories
         try:
             os.chdir(tokens[1])
-            tokens = []
-            fullPath = None
         except:
             os.write(2, 'Path not found'.encode())
         finally:
             return None, None
-    
+        
     return tokens, fullPath
 
 # Sets up for pipe cmds
@@ -119,12 +118,15 @@ def pipeFunctionality():
         for fd in (pr, pw): os.close(fd)
 
         executeCommand(pipe['cmd2'], fullPath)
-    
+
 def shell():
     prompt = '$ ' if 'PS1' not in os.environ else os.environ['PS1']
     os.write(1, prompt.encode())
-    userInput = os.read(0, 1024)
 
+    try:
+        userInput = str(input())
+    except EOFError:
+        sys.exit(1)
     return getTokens(userInput)
 
 tokens, fullPath = shell()
