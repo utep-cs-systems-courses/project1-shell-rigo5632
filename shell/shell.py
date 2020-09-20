@@ -24,7 +24,7 @@ def executeCommand(tokens, fullPath):
         os.write(2, ("%s Cannot be found\n" % tokens[0]).encode())
         sys.exit(0)
     else:
-        # runs full path command
+        # runs full path commands
         try:
             os.execve(tokens[0], tokens, os.environ)
         except FileNotFoundError:
@@ -35,8 +35,6 @@ def executeCommand(tokens, fullPath):
 
 # Resets redirection flags once child has finished executing redirection
 def resetRedirection():
-    #print(1)
-    # resets stdIn/stdOut depending on the type of redirection
     os.dup2(redirect['previousFD'], redirect['fileDescriptor'])
     os.close(redirect['previousFD'])
     redirect['inTokens'] = False
@@ -46,21 +44,20 @@ def resetRedirection():
 
 # Sets the type of redirection (input/output)
 def handleRedirection(redirect):
-    #print(1)
-    #print(tokens)
     os.close(redirect['fileDescriptor'])
     os.open(tokens[len(tokens)-1], redirect['file'])
     os.set_inheritable(redirect['fileDescriptor'], True)
     return tokens[:len(tokens)-1]
 
+# Gets tokens from userInput, returns tokens if they are multiple cmds
 def getCmds(line):
-    a = []
+    cmdList = []
     for cmds in line:
-        a.append(re.split(b'\s', cmds))
-    if len(a) <= 2:
-        return a[0], False
+        cmdList.append(re.split(b'\s', cmds))
+    if len(cmdList) <= 2: # single cmd
+        return cmdList[0], False
     else:
-        return a, True
+        return cmdList, True # multiple cmds from new line
 
 #cleans line from any trash it might have(new line, empty spaces)
 # it also sets flags for pipes or rediretion
@@ -92,19 +89,20 @@ def cleanLine(line):
         counter += 1
     return tokens
 
+# Sets cmds for piping into dictionary
 def getPipeCmds(tokens):
     pipe['cmd1'] = tokens[:pipe['split']]
     pipe['cmd2'] = tokens[pipe['split']:]
 
 # Gets tokens from String
 def getTokens(userInput):
-    line = re.split(b'\n', userInput)
-    line, multipleCmds = getCmds(line)
-    if multipleCmds:
+    line = re.split(b'\n', userInput) #splits on new line
+    line, multipleCmds = getCmds(line) #gets unclean cmds from userInput
+    if multipleCmds: # if we have multiple cmds from new line split
         for i in range(len(line)):
-            line[i] = cleanLine(line[i])
-        line = line[:-1]
-        for cmds in line:
+            line[i] = cleanLine(line[i]) # cleans each cmd
+        line = line[:-1] # removes the final newline
+        for cmds in line: # checks for flags (piping, redirection, etc)
             if pipe['inTokens']: getPipeCmds(cmds)
             if len(cmds) == 1 and cmds[0] == 'exit':sys.exit(0)
             if len(cmds) == 2 and cmds[0] == 'cd':
@@ -114,12 +112,12 @@ def getTokens(userInput):
                     os.write(2, 'Path not found'.encode())
                 finally:
                     return line[1], False, False
-        fullPath = re.search('/', line[0][0])
+        fullPath = re.search('/', line[0][0]) # we have full path cmd
         return line, fullPath, True
     else:
-        tokens = cleanLine(line)
-        if not tokens: return None, None, False
-        fullPath = re.search('/', tokens[0])
+        tokens = cleanLine(line) #cleans single cmd
+        if not tokens: return None, None, False # no tokens found
+        fullPath = re.search('/', tokens[0]) #is full path
         if pipe['inTokens']: getPipeCmds(tokens)
         if len(tokens) == 1 and tokens[0] == 'exit': sys.exit(0) #Exit Shell
         if tokens[0] == 'cd':               #Moves Directories
@@ -153,6 +151,7 @@ def pipeFunctionality():
 
         executeCommand(pipe['cmd2'], fullPath)
 
+#creates new child, used for excuting multiple cmds
 def newChildProcess(cmd, fullpath):
     if not cmd: return
     newChild = os.fork()
@@ -163,11 +162,12 @@ def newChildProcess(cmd, fullpath):
     else:
         child = os.wait() if not backgroundProcess else None
 
+#prints prompt and gets tokens
 def shell():
     prompt = '$ ' if 'PS1' not in os.environ else os.environ['PS1']
     os.write(1, prompt.encode())
     
-    userInput = os.read(0, 1024) #reads 1 MByte up to input
+    userInput = os.read(0, 1024) #reads 1 MByte
     if not userInput: sys.exit(1)
     return getTokens(userInput)
 
@@ -178,7 +178,7 @@ while True:
         os.write(stdErrorDisplay, ("fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
     elif rc == 0: # child
-        if multipleCmds:
+        if multipleCmds: #execute multiple cmds
             for cmd in tokens:
                 newChildProcess(cmd, fullPath)
             sys.exit(0)
@@ -188,7 +188,7 @@ while True:
         sys.exit(0)
     else: #parent
         exitCode = os.wait() if not backgroundProcess else None
-        if pipe['inTokens']: pipe['inTokens'] = False
+        if pipe['inTokens']: pipe['inTokens'] = False # Flag reset
         if redirect['inTokens']: resetRedirection()
         if exitCode[1] != 0: os.write(1, ('Program Terminated with exit code: %d\n' % exitCode[1]).encode())
         backgroundProcess = False
